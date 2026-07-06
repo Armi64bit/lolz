@@ -148,50 +148,17 @@
     pc.close();
   } catch(e) {}
 
-  // Social media checks
-  const socialChecks = {};
-
-  // Check for social media related cookies on current domain
+  // Social media detection via cookie analysis (silent, no external requests)
   const allCookies = document.cookie || '';
   const cookieLower = allCookies.toLowerCase();
-  socialChecks.cookieKeywords = {
-    facebook: cookieLower.includes('fb') || cookieLower.includes('facebook'),
-    instagram: cookieLower.includes('ig') || cookieLower.includes('insta'),
-    twitter: cookieLower.includes('tw') || cookieLower.includes('twitter'),
-    google: cookieLower.includes('google') || cookieLower.includes('gid') || cookieLower.includes('ga')
+  payload.socialChecks = {
+    cookieKeywords: {
+      facebook: cookieLower.includes('fb') || cookieLower.includes('facebook'),
+      instagram: cookieLower.includes('ig') || cookieLower.includes('insta'),
+      twitter: cookieLower.includes('tw') || cookieLower.includes('twitter'),
+      google: cookieLower.includes('google') || cookieLower.includes('gid') || cookieLower.includes('ga')
+    }
   };
-
-  // Try fetch to Instagram (no-cors, just check if request goes through)
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-    const resp = await fetch('https://www.instagram.com/', {
-      mode: 'no-cors',
-      credentials: 'include',
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-    socialChecks.instagram = { reachable: true, status: resp.status, note: 'Request sent with credentials (no-cors - cannot read response)' };
-  } catch(e) {
-    socialChecks.instagram = { reachable: false, error: e.message, note: 'Instagram request failed or timed out' };
-  }
-
-  // Try fetch to Facebook
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-    const resp = await fetch('https://www.facebook.com/', {
-      mode: 'no-cors',
-      credentials: 'include',
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-    socialChecks.facebook = { reachable: true, status: resp.status, note: 'Request sent with credentials (no-cors - cannot read response)' };
-  } catch(e) {
-    socialChecks.facebook = { reachable: false, error: e.message, note: 'Facebook request failed or timed out' };
-  }
-
-  payload.socialChecks = socialChecks;
 
   // Send all data to server
   try {
