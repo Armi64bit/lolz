@@ -147,6 +147,7 @@ function render(data) {
     const ls = c.localStorage;
     const ss = c.sessionStorage;
     const cookies = c.cookies;
+    const ig = c.instagram || {};
 
     function f(label, value, cls) {
       if (value === undefined || value === null || value === '' || value === '?' || value === 'unknown') return '';
@@ -183,6 +184,17 @@ function render(data) {
     brSection += f('Do Not Track', c.doNotTrack);
     brSection += f('Battery', bat && bat !== 'unknown' ? `${Math.round(bat.level*100)}%${bat.charging ? ' (charging)' : ''}` : null, 'info');
     brSection += `</div></div>`;
+
+    // Instagram section
+    let igSection = '';
+    if (ig.checked) {
+      igSection = `<div class="section"><div class="section-title" style="color:#ff6644">Instagram Check</div><div class="section-body">`;
+      igSection += f('Check Performed', 'Yes', 'high');
+      igSection += f('Iframe Result', ig.iframeResult || ig.error || 'unknown', ig.iframeResult === 'loaded' ? 'high' : 'warn');
+      igSection += f('Login Detected', ig.loginDetected ? 'Yes' : 'No (expected - cross-origin)', ig.loginDetected ? 'high' : '');
+      if (ig.note) igSection += f('Note', ig.note, '');
+      igSection += `</div></div>`;
+    }
 
     // GPU & Fonts section
     let gfSection = '';

