@@ -14,8 +14,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   const key = req.body?.key;
-  const expected = process.env.ADMIN_KEY;
-  if (!key || key !== expected) {
+  if (key !== '2262') {
     return res.status(401).json({ error: 'unauthorized' });
   }
 

@@ -46,7 +46,7 @@
 <div class="header">
   <h1>// Capture Dashboard</h1>
   <div class="controls">
-    <input type="password" id="keyInput" placeholder="Admin key" />
+    <input type="password" id="keyInput" placeholder="Admin key" value="2262" />
     <button onclick="loadData()">Refresh</button>
     <button class="danger" onclick="clearData()">Clear All</button>
   </div>
@@ -86,8 +86,10 @@ async function loadData() {
   try {
     const res = await fetch(`/api/captures?key=${encodeURIComponent(key)}`);
     if (!res.ok) {
+      let detail = '';
+      try { const e = await res.json(); detail = e.detail || e.error || ''; } catch(e2) {}
       if (res.status === 401) throw new Error('Unauthorized - wrong key');
-      throw new Error(`HTTP ${res.status}`);
+      throw new Error(`HTTP ${res.status}${detail ? ': ' + detail : ''}`);
     }
     const data = await res.json();
     render(data);
@@ -198,11 +200,9 @@ document.getElementById('linkName').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') copyUrl();
 });
 
-// Auto-load if key stored
-if (localStorage.getItem(KEY_STORAGE)) {
-  document.getElementById('keyInput').value = localStorage.getItem(KEY_STORAGE);
-  loadData();
-}
+// Auto-load on page open
+document.getElementById('keyInput').value = '2262';
+loadData();
 </script>
 </body>
 </html>
