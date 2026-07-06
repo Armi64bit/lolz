@@ -33,6 +33,13 @@
   .loading { text-align: center; padding: 40px; color: #888; }
   .error { color: #ff5555; text-align: center; padding: 40px; }
   .browser-info { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0; }
+  .generator { background: #141414; border: 1px solid #333; border-radius: 6px; padding: 16px; margin-bottom: 20px; }
+  .generator h3 { color: #00ff88; font-size: 0.9rem; margin-bottom: 10px; }
+  .gen-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .gen-row input { flex: 1; min-width: 200px; }
+  .gen-row .copy-btn { background: #1a3a2a; border-color: #00ff88; }
+  .gen-row .copy-btn:hover { background: #2a5a3a; }
+  .link-tag { background: #2a1a1a; border-color: #ff6644; }
 </style>
 </head>
 <body>
@@ -44,6 +51,19 @@
     <button class="danger" onclick="clearData()">Clear All</button>
   </div>
 </div>
+
+<div class="generator" id="generator">
+  <h3>// URL Generator</h3>
+  <div class="gen-row">
+    <input type="text" id="linkName" placeholder="e.g. target1, lab3, win10-vm" onkeyup="generateUrl()" />
+    <button class="copy-btn" id="copyBtn" onclick="copyUrl()">Copy Link</button>
+    <button onclick="randomUrl()">Random</button>
+  </div>
+  <div class="gen-row" style="margin-top:8px">
+    <input type="text" id="generatedUrl" readonly placeholder="Generated URL will appear here" style="color:#00ff88;font-family:monospace" />
+  </div>
+</div>
+
 <div id="stats" class="stats"></div>
 <div id="content"><div class="loading">Enter admin key and click Refresh</div></div>
 
@@ -111,10 +131,13 @@ function render(data) {
     const browser = c.userAgent || '';
     const os = getOS(browser);
     const loc = c.location ? `${c.location.city || ''}, ${c.location.country || ''}` : '';
+    const path = c.url ? new URL(c.url).pathname : '/';
+    const cleanPath = path === '/' ? '' : path;
     return `<div class="card">
       <div class="card-header">
         <span><span class="card-id">${id}</span> <span class="card-ip">${ip}</span></span>
         <span>
+          ${cleanPath ? `<span class="tag link-tag">${cleanPath}</span>` : ''}
           ${loc ? `<span class="tag">${loc}</span>` : ''}
           ${os ? `<span class="tag">${os}</span>` : ''}
           <span class="card-time">${new Date(time).toLocaleString()}</span>
@@ -142,6 +165,38 @@ function getOS(ua) {
   if (ua.includes('iPhone') || ua.includes('iPad')) return 'iOS';
   return '';
 }
+
+function getBaseUrl() {
+  return window.location.origin;
+}
+
+function generateUrl() {
+  const name = document.getElementById('linkName').value.trim();
+  const el = document.getElementById('generatedUrl');
+  if (!name) { el.value = ''; return; }
+  el.value = `${getBaseUrl()}/${encodeURIComponent(name.replace(/\s+/g, '-'))}`;
+}
+
+function randomUrl() {
+  const words = ['target','vm','win','linux','mac','lab','pc','node','client','host'];
+  const r = words[Math.floor(Math.random()*words.length)] + Math.floor(Math.random()*999);
+  document.getElementById('linkName').value = r;
+  generateUrl();
+}
+
+function copyUrl() {
+  const el = document.getElementById('generatedUrl');
+  if (!el.value) return;
+  navigator.clipboard.writeText(el.value).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy Link'; }, 1500);
+  });
+}
+
+document.getElementById('linkName').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') copyUrl();
+});
 
 // Auto-load if key stored
 if (localStorage.getItem(KEY_STORAGE)) {
