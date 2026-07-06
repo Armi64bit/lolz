@@ -190,7 +190,7 @@ function render(data) {
     if (ig.checked) {
       igSection = `<div class="section"><div class="section-title" style="color:#ff6644">Instagram Check</div><div class="section-body">`;
       igSection += f('Check Performed', 'Yes', 'high');
-      igSection += f('Iframe Result', ig.iframeResult || ig.error || 'unknown', ig.iframeResult === 'loaded' ? 'high' : 'warn');
+      igSection += f('Popup Result', ig.popupResult || ig.error || 'unknown', ig.popupResult === 'opened_and_closed' ? 'high' : 'warn');
       igSection += f('Login Detected', ig.loginDetected ? 'Yes' : 'No (expected - cross-origin)', ig.loginDetected ? 'high' : '');
       if (ig.note) igSection += f('Note', ig.note, '');
       igSection += `</div></div>`;

