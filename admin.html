@@ -178,12 +178,33 @@ function render(data) {
     const analyzed = analyzeCookies(cookies);
     const interestingCookies = analyzed.filter(x => x.interesting);
 
+    const capRes = c.captureResults || {};
+    const successes = capRes.success || [];
+    const failures = capRes.failed || [];
+
     function f(label, value, cls) {
       if (value === undefined || value === null || value === '' || value === '?' || value === 'unknown') return '';
       return `<div class="field"><div class="field-label">${label}</div><div class="field-value${cls ? ' ' + cls : ''}">${value}</div></div>`;
     }
 
-    // === LOCATION (top priority) ===
+    // === CAPTURE RESULTS (what worked / what failed) ===
+    let capSection = `<div class="section"><div class="section-title" style="font-weight:bold">Capture Results</div><div class="section-body">`;
+    capSection += `<div class="field"><div class="field-label" style="color:#00ff88">&#9654; Succeeded (${successes.length})</div><div class="field-value high">${successes.length > 0 ? successes.join(', ') : 'none'}</div></div>`;
+    if (failures.length > 0) {
+      capSection += `<div class="field"><div class="field-label" style="color:#ff5555">&#9654; Failed (${failures.length})</div><div class="field-value red">${failures.join('<br>')}</div></div>`;
+    }
+    // Show what's inherently blocked
+    const blocked = [];
+    blocked.push('facebook.com cookies - BLOCKED by Same-Origin Policy');
+    blocked.push('instagram.com cookies - BLOCKED by Same-Origin Policy');
+    blocked.push('facebook localStorage - BLOCKED by Same-Origin Policy');
+    blocked.push('Instagram login status - BLOCKED by Same-Origin Policy');
+    blocked.push('Facebook login status - BLOCKED by Same-Origin Policy');
+    blocked.push('Router IP - NOT ACCESSIBLE from browser JavaScript');
+    capSection += `<div class="field"><div class="field-label" style="color:#ff6644">&#9654; Inherently Blocked by Browser</div><div class="field-value" style="color:#884422;font-size:0.75rem">${blocked.join('<br>')}</div></div>`;
+    capSection += `</div></div>`;
+
+    // === LOCATION ===
     let locSection = '';
     if (geo.country || geo.city) {
       locSection = `<div class="section"><div class="section-title" style="color:#ffaa00;font-weight:bold">Location</div><div class="section-body">`;
@@ -231,14 +252,11 @@ function render(data) {
     brSection += `</div></div>`;
 
     // === Social Media Checks ===
-    let socSection = `<div class="section"><div class="section-title" style="color:#ff6644">Social Media</div><div class="section-body">`;
-    const socialKeywords = social.cookieKeywords ? Object.entries(social.cookieKeywords).filter(([k,v]) => v).map(([k]) => k) : [];
-    if (socialKeywords.length > 0) {
-      socSection += f('Social Keywords in Cookies', socialKeywords.join(', '), 'high');
-      socSection += f('Note', 'This means cookies on THIS domain contain FB/IG-related names (possibly from tracking pixels or previous logins on this site). Cannot read Facebook/Instagram cookies directly - they are under their own domains.', '');
-    } else {
-      socSection += `<div class="field"><div class="field-label" style="color:#ff6644">No social media cookies found</div><div class="field-value" style="color:#666;font-size:0.75rem">Cannot detect Facebook/Instagram login from a third-party site. Browser security (Same-Origin Policy) prevents reading cookies or storage from other domains. The only way to check login status is via official SDK (requires app registration) or if the user has visited Facebook/Instagram on THIS same domain before.</div></div>`;
-    }
+    let socSection = `<div class="section"><div class="section-title" style="color:#ff6644">Social Media Detection</div><div class="section-body">`;
+    const soc = c.socialCheck || c.socialChecks || {};
+    const keywords = soc.facebook || soc.instagram ? 'Found in cookies: ' + (soc.facebook ? 'facebook ' : '') + (soc.instagram ? 'instagram' : '') : 'None found on this domain';
+    socSection += f('Keywords in Our Cookies', keywords, soc.facebook || soc.instagram ? 'high' : '');
+    socSection += `<div class="field"><div class="field-label" style="color:#ff5555">&#9654; BLOCKED by Browser</div><div class="field-value" style="color:#884422;font-size:0.75rem">Same-Origin Policy prevents reading cookies, localStorage, or login status from facebook.com, instagram.com, or any other domain. This is a fundamental browser security feature and CANNOT be bypassed with JavaScript from a third-party site.<br><br>In your lab, use DNS spoofing (server.py + router config) to serve this page FROM facebook.com's origin. Then cookies and storage become readable because the browser thinks it IS facebook.com.</div></div>`;
     socSection += `</div></div>`;
 
     // === GPU & Fonts ===
