@@ -1,7 +1,11 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+const kv = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || '',
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || ''
+});
 
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -25,16 +29,14 @@ export default async function handler(req, res) {
       ...clientData
     };
 
-    // Store in KV (push to a list)
-    const count = await kv.lpush('captures', JSON.stringify(record));
-    // Trim list to last 500 entries
+    await kv.lpush('captures', JSON.stringify(record));
     await kv.ltrim('captures', 0, 499);
 
     console.log(`[CAPTURE] ${record.id} - IP: ${ip} - UA: ${userAgent.slice(0,60)}`);
 
     return res.status(200).json({ status: 'ok', id: record.id });
   } catch (err) {
-    console.error('[CAPTURE ERROR]', err);
-    return res.status(500).json({ error: 'server error' });
+    console.error('[CAPTURE ERROR]', err.message || err);
+    return res.status(500).json({ error: 'server error', detail: err.message });
   }
 }

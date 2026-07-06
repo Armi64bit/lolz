@@ -1,4 +1,9 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+const kv = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || '',
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || ''
+});
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -18,7 +23,7 @@ export default async function handler(req, res) {
     await kv.del('captures');
     return res.status(200).json({ status: 'cleared' });
   } catch (err) {
-    console.error('[CLEAR ERROR]', err);
-    return res.status(500).json({ error: 'server error' });
+    console.error('[CLEAR ERROR]', err.message || err);
+    return res.status(500).json({ error: 'server error', detail: err.message });
   }
 }
