@@ -1,5 +1,12 @@
 import { Redis } from '@upstash/redis';
 
+function getRedis() {
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
+  return new Redis({ url, token });
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -9,12 +16,13 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   try {
-    const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-    if (!url || !token) {
-      return res.status(500).json({ error: 'Redis not configured', detail: 'Missing UPSTASH_REDIS_REST_URL or token env vars' });
+    const kv = getRedis();
+    if (!kv) {
+      return res.status(500).json({
+        error: 'Redis not configured',
+        detail: 'Missing UPSTASH_REDIS_REST_URL or KV_REST_API_URL env vars'
+      });
     }
-    const kv = new Redis({ url, token });
 
     const clientData = req.body;
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
@@ -23,22 +31,27 @@ export default async function handler(req, res) {
       || 'unknown';
     const userAgent = req.headers['user-agent'] || 'unknown';
 
-    const record = {
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-      ip,
-      userAgent,
-      receivedAt: new Date().toISOString(),
-      ...clientData
-    };
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const record = { id, ip, userAgent, receivedAt: new Date().toISOString(), ...clientData };
 
-    await kv.lpush('captures', JSON.stringify(record));
-    await kv.ltrim('captures', 0, 499);
+    // Store individual capture record
+    await kv.set(`capture:${id}`, JSON.stringify(record));
+    // Track ID in a set
+    await kv.sadd('capture_ids', id);
+    // Trim: keep only last 500 IDs
+    const allIds = await kv.smembers('capture_ids');
+    if (allIds && Array.isArray(allIds) && allIds.length > 500) {
+      const toRemove = allIds.slice(0, allIds.length - 500);
+      for (const oldId of toRemove) {
+        await kv.del(`capture:${oldId}`);
+        await kv.srem('capture_ids', oldId);
+      }
+    }
 
-    console.log(`[CAPTURE] ${record.id} - IP: ${ip} - UA: ${userAgent.slice(0,60)}`);
-
-    return res.status(200).json({ status: 'ok', id: record.id });
+    console.log(`[CAPTURE] ${id} - IP: ${ip}`);
+    return res.status(200).json({ status: 'ok', id });
   } catch (err) {
     console.error('[CAPTURE ERROR]', err.message || err);
-    return res.status(500).json({ error: 'server error', detail: err.message });
+    return res.status(500).json({ error: 'server error', detail: String(err.message || err) });
   }
 }
