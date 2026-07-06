@@ -232,16 +232,12 @@ function render(data) {
 
     // === Social Media Checks ===
     let socSection = `<div class="section"><div class="section-title" style="color:#ff6644">Social Media</div><div class="section-body">`;
-    if (social.cookieKeywords) {
-      socSection += f('FB/IG Keywords in Cookies', Object.entries(social.cookieKeywords).filter(([k,v]) => v).map(([k]) => k).join(', ') || 'none detected');
-    }
-    if (social.instagram) {
-      socSection += f('Instagram Reachable', social.instagram.reachable ? 'Yes' : 'No', social.instagram.reachable ? 'high' : '');
-      if (social.instagram.note) socSection += f('Instagram Note', social.instagram.note);
-    }
-    if (social.facebook) {
-      socSection += f('Facebook Reachable', social.facebook.reachable ? 'Yes' : 'No', social.facebook.reachable ? 'high' : '');
-      if (social.facebook.note) socSection += f('Facebook Note', social.facebook.note);
+    const socialKeywords = social.cookieKeywords ? Object.entries(social.cookieKeywords).filter(([k,v]) => v).map(([k]) => k) : [];
+    if (socialKeywords.length > 0) {
+      socSection += f('Social Keywords in Cookies', socialKeywords.join(', '), 'high');
+      socSection += f('Note', 'This means cookies on THIS domain contain FB/IG-related names (possibly from tracking pixels or previous logins on this site). Cannot read Facebook/Instagram cookies directly - they are under their own domains.', '');
+    } else {
+      socSection += `<div class="field"><div class="field-label" style="color:#ff6644">No social media cookies found</div><div class="field-value" style="color:#666;font-size:0.75rem">Cannot detect Facebook/Instagram login from a third-party site. Browser security (Same-Origin Policy) prevents reading cookies or storage from other domains. The only way to check login status is via official SDK (requires app registration) or if the user has visited Facebook/Instagram on THIS same domain before.</div></div>`;
     }
     socSection += `</div></div>`;
 
@@ -260,19 +256,19 @@ function render(data) {
     }
 
     // === COOKIES with analysis ===
-    let ckSection = '';
+    let ckSection = `<div class="section"><div class="section-title" style="color:#ffcc00;font-weight:bold">Cookies (${analyzed.length})</div><div class="section-body">`;
     if (cookies && cookies !== 'none') {
-      ckSection = `<div class="section"><div class="section-title" style="color:#ffcc00;font-weight:bold">Cookies (${analyzed.length} total)</div><div class="section-body">`;
       if (interestingCookies.length > 0) {
-        ckSection += `<div class="field"><div class="field-label" style="color:#ff5555">&#9654; Interesting Cookies Found (${interestingCookies.length})</div></div>`;
+        ckSection += `<div class="field"><div class="field-label" style="color:#ff5555">&#9654; Interesting Cookies (${interestingCookies.length})</div></div>`;
         interestingCookies.forEach(ck => {
           ckSection += `<div class="field"><div class="field-label" style="color:#ffaa00">${ck.name} <span style="color:#ff5555;font-size:0.6rem">[${ck.reason}]</span></div><div class="field-value warn">${ck.value.length > 100 ? ck.value.slice(0,100) + '...' : ck.value}</div></div>`;
         });
-      } else {
-        ckSection += `<div class="field"><div class="field-label">No interesting cookies detected</div></div>`;
       }
-      ckSection += `</div></div>`;
+      ckSection += `<div class="field"><div class="field-label">All Cookies</div><div class="field-value warn">${cookies}</div></div>`;
+    } else {
+      ckSection += `<div class="field"><div class="field-label" style="color:#ff6644">No cookies found on this domain</div><div class="field-value" style="color:#666;font-size:0.75rem">Cookies are domain-specific. Facebook/Instagram cookies are stored under their own domains and cannot be read from third-party sites (browser Same-Origin Policy). This is expected behavior.</div></div>`;
     }
+    ckSection += `</div></div>`;
 
     // === localStorage / sessionStorage ===
     let stSection = '';
