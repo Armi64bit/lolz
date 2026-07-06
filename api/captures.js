@@ -21,7 +21,9 @@ export default async function handler(req, res) {
     }
     const kv = new Redis({ url, token });
     const raw = await kv.lrange('captures', 0, -1);
-    const data = raw.map(r => JSON.parse(r));
+    const data = raw.map(r => {
+      try { return typeof r === 'string' ? JSON.parse(r) : r; } catch(e) { return r; }
+    }).filter(r => r && typeof r === 'object');
     return res.status(200).json({ total: data.length, captures: data });
   } catch (err) {
     console.error('[LIST ERROR]', err.message || err);
